@@ -1,0 +1,52 @@
+<!--login.html-->
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Login - Secure Car Rental</title>
+</head>
+<body>
+  <h1>Вход</h1>
+  <form id="login-form">
+    <label>
+      Логин:
+      <input name="username" required>
+    </label>
+    <br>
+    <label>
+      Пароль:
+      <input name="password" type="password" required>
+    </label>
+    <br>
+    <button type="submit">Войти</button>
+  </form>
+  <p id="error" style="color:red"></p>
+
+  <script>
+    const form = document.getElementById('login-form');
+    const errorEl = document.getElementById('error');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errorEl.textContent = '';
+
+      const username = form.username.value;
+      const password = form.password.value;
+
+      const resp = await fetch('/api/login', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({username, password}),
+        credentials: 'same-origin'   // чтобы браузер отправлял/получал cookies [web:143][web:141]
+      });
+
+      if (resp.ok) {
+        window.location.href = '/cars.html';
+      } else {
+        const data = await resp.json().catch(() => ({}));
+        errorEl.textContent = data.error || 'Ошибка входа';
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16
+    container_name: secure_car_rental_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: secure_user
+      POSTGRES_PASSWORD: secure_pass
+      POSTGRES_DB: secure_car_rental
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./pgdata:/var/lib/postgresql/data

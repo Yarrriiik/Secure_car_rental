@@ -1,0 +1,5 @@
+SELECT u.id, u.username, r.name AS role
+FROM users u
+JOIN user_roles ur ON ur.user_id = u.id
+JOIN roles r ON r.id = ur.role_id
+ORDER BY u.id;

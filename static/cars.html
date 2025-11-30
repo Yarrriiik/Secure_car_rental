@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Cars - Secure Car Rental</title>
+</head>
+<body>
+  <h1>Автомобили</h1>
+  <p id="user-info"></p>
+  <button id="reload">Обновить список</button>
+  <ul id="cars-list"></ul>
+  <p id="error" style="color:red"></p>
+
+  <script>
+    const userInfo = document.getElementById('user-info');
+    const carsList = document.getElementById('cars-list');
+    const errorEl = document.getElementById('error');
+    const reloadBtn = document.getElementById('reload');
+
+    async function loadMe() {
+      const resp = await fetch('/api/me', {credentials: 'same-origin'});
+      if (!resp.ok) {
+        window.location.href = '/login.html';
+        return;
+      }
+      const data = await resp.json();
+      userInfo.textContent = `Вы вошли как ${data.username}`;
+    }
+
+    async function loadCars() {
+      errorEl.textContent = '';
+      carsList.innerHTML = '';
+      const resp = await fetch('/cars', {credentials: 'same-origin'});
+      if (!resp.ok) {
+        const data = await resp.json().catch(() => ({}));
+        errorEl.textContent = data.error || 'Ошибка загрузки машин';
+        return;
+      }
+      const cars = await resp.json();
+      for (const car of cars) {
+        const li = document.createElement('li');
+        li.textContent = `${car.model} (${car.plate_number}) — ${car.status}, ${car.price_per_day}₽/день`;
+        carsList.appendChild(li);
+      }
+    }
+
+    reloadBtn.addEventListener('click', loadCars);
+
+    loadMe().then(loadCars);
+  </script>
+</body>
+</html>

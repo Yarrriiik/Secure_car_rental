@@ -1,0 +1,8 @@
+#старт бд докера
+docker compose up -d
+
+
+#create dataset
+docker cp schema/schema.sql secure_car_rental_db:/schema.sql
+docker exec -it secure_car_rental_db psql -U secure_user -d secure_car_rental -f /schema.sql
+

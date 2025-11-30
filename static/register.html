@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Register - Secure Car Rental</title>
+</head>
+<body>
+  <h1>Регистрация</h1>
+  <form id="register-form">
+    <label>
+      Логин:
+      <input name="username" required>
+    </label>
+    <br>
+    <label>
+      Пароль:
+      <input name="password" type="password" required>
+    </label>
+    <br>
+    <button type="submit">Зарегистрироваться</button>
+  </form>
+  <p id="error" style="color:red"></p>
+  <p>
+    Уже есть аккаунт?
+    <a href="/login.html">Войти</a>
+  </p>
+
+  <script>
+    const form = document.getElementById('register-form');
+    const errorEl = document.getElementById('error');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errorEl.textContent = '';
+
+      const username = form.username.value;
+      const password = form.password.value;
+
+      const resp = await fetch('/api/register', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({username, password}),
+        credentials: 'same-origin'  // чтобы куки и сессии вели себя одинаково [web:143][web:146]
+      });
+
+      if (resp.ok) {
+        // регистрация прошла, отправим на логин
+        window.location.href = '/login.html';
+      } else {
+        const data = await resp.json().catch(() => ({}));
+        errorEl.textContent = data.error || 'Ошибка регистрации';
+      }
+    });
+  </script>
+</body>
+</html>

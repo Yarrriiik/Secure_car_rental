@@ -1,0 +1,14 @@
+-- гарантируем, что роли существуют
+INSERT INTO roles (name)
+VALUES ('ADMIN'), ('MANAGER')
+ON CONFLICT (name) DO NOTHING;
+
+-- сделаем пользователя с id=1 админом
+INSERT INTO user_roles (user_id, role_id)
+SELECT 1, r.id FROM roles r WHERE r.name = 'ADMIN'
+ON CONFLICT (user_id, role_id) DO NOTHING;
+
+-- сделаем пользователя с id=2 менеджером
+INSERT INTO user_roles (user_id, role_id)
+SELECT 2, r.id FROM roles r WHERE r.name = 'MANAGER'
+ON CONFLICT (user_id, role_id) DO NOTHING;
