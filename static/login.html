@@ -1,43 +1,153 @@
-<!--login.html-->
 <!doctype html>
 <html lang="ru">
 <head>
   <meta charset="utf-8">
   <title>Login - Secure Car Rental</title>
+  <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <h1>Вход</h1>
-  <form id="login-form">
-    <label>
-      Логин:
-      <input name="username" required>
-    </label>
-    <br>
-    <label>
-      Пароль:
-      <input name="password" type="password" required>
-    </label>
-    <br>
-    <button type="submit">Войти</button>
-  </form>
-  <p id="error" style="color:red"></p>
+<div class="page">
+  <div class="card">
+    <h1>Вход (защищённый)</h1>
+        <form id="login-form">
+      <label>
+        Логин:
+        <input name="username" required>
+      </label>
+      <label>
+        Пароль:
+        <input name="password" type="password" required>
+      </label>
+      <button type="submit">Войти</button>
+    </form>
+    <p id="error" style="color:red"></p>
+    <p style="margin-top:8px;">
+      Нет аккаунта?
+      <a href="/register.html">Зарегистрироваться</a>
+    </p>
+  </div>
+</div>
 
-  <script>
-    const form = document.getElementById('login-form');
-    const errorEl = document.getElementById('error');
+<script>
+  const form = document.getElementById('login-form');
+  const errorEl = document.getElementById('error');
 
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      errorEl.textContent = '';
+  // --- Вспомогательные функции ---
 
-      const username = form.username.value;
-      const password = form.password.value;
+  function modPow(base, exponent, modulus) {
+    if (modulus === 1n) return 0n;
+    let result = 1n;
+    base = base % modulus;
+    while (exponent > 0n) {
+      if (exponent % 2n === 1n) {
+        result = (result * base) % modulus;
+      }
+      exponent = exponent / 2n;
+      base = (base * base) % modulus;
+    }
+    return result;
+  }
 
-      const resp = await fetch('/api/login', {
+  function bigIntToBytes(bi) {
+    let hex = bi.toString(16);
+    if (hex.length % 2) hex = '0' + hex;
+    const len = hex.length / 2;
+    const out = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+      out[i] = parseInt(hex.substr(i * 2, 2), 16);
+    }
+    return out;
+  }
+
+  function bufToBase64(buf) {
+    const bytes = new Uint8Array(buf);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+  }
+
+  async function deriveAesKeyFromShared(sharedBigInt) {
+    const sharedBytes = bigIntToBytes(sharedBigInt);
+    const hash = await crypto.subtle.digest('SHA-256', sharedBytes);
+    return crypto.subtle.importKey(
+      'raw',
+      hash,
+      { name: 'AES-CBC' },
+      false,
+      ['encrypt']
+    );
+  }
+
+  async function encryptPassword(aesKey, password) {
+    const enc = new TextEncoder();
+    const iv = crypto.getRandomValues(new Uint8Array(16));
+    const data = enc.encode(password);
+
+    const ciphertext = await crypto.subtle.encrypt(
+      { name: 'AES-CBC', iv },
+      aesKey,
+      data
+    );
+
+    return {
+      iv_b64: bufToBase64(iv.buffer),
+      ciphertext_b64: bufToBase64(ciphertext),
+    };
+  }
+
+  // Каждый раз перед логином берём новые DH-параметры
+  async function getDhParams() {
+    const resp = await fetch('/api/dh-init', { credentials: 'same-origin' });
+    if (!resp.ok) {
+      throw new Error('dh-init failed: ' + resp.status);
+    }
+    return resp.json();
+  }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    errorEl.textContent = '';
+
+    const username = form.username.value;
+    const password = form.password.value;
+
+    try {
+      // 1. На КАЖДЫЙ логин запрашиваем новые DH-параметры
+      const dhParams = await getDhParams();
+
+      // 2. Парсим параметры DH как BigInt
+      const p = BigInt(dhParams.p);
+      const g = BigInt(dhParams.g);
+      const serverPub = BigInt(dhParams.server_pub);
+
+      // 3. Генерим свой секрет b и публичный ключ B = g^b mod p
+      const b = BigInt('0x' + crypto.getRandomValues(new Uint8Array(32))
+        .reduce((acc, v) => acc + v.toString(16).padStart(2, '0'), ''));
+      const clientPub = modPow(g, b, p);
+
+      // 4. Общий секрет K = A^b mod p
+      const shared = modPow(serverPub, b, p);
+
+      // 5. Ключ AES из shared
+      const aesKey = await deriveAesKeyFromShared(shared);
+
+      // 6. Шифруем пароль
+      const { iv_b64, ciphertext_b64 } = await encryptPassword(aesKey, password);
+
+      // 7. Отправляем защищённый логин
+      const resp = await fetch('/api/login_secure', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({username, password}),
-        credentials: 'same-origin'   // чтобы браузер отправлял/получал cookies [web:143][web:141]
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          username: username,
+          dh_id: dhParams.dh_id,
+          client_pub: clientPub.toString(),
+          iv: iv_b64,
+          ciphertext: ciphertext_b64
+        })
       });
 
       if (resp.ok) {
@@ -46,7 +156,12 @@
         const data = await resp.json().catch(() => ({}));
         errorEl.textContent = data.error || 'Ошибка входа';
       }
-    });
-  </script>
+    } catch (err) {
+      console.error(err);
+      errorEl.textContent = 'Ошибка криптографической обработки';
+    }
+  });
+</script>
+
 </body>
 </html>

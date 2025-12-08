@@ -3,50 +3,172 @@
 <head>
   <meta charset="utf-8">
   <title>Cars - Secure Car Rental</title>
+  <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <h1>Автомобили</h1>
-  <p id="user-info"></p>
-  <button id="reload">Обновить список</button>
-  <ul id="cars-list"></ul>
-  <p id="error" style="color:red"></p>
+<div class="page">
+  <div class="card list-page">
+    <h1>Автомобили</h1>
+    <p id="user-info"></p>
 
-  <script>
-    const userInfo = document.getElementById('user-info');
-    const carsList = document.getElementById('cars-list');
-    const errorEl = document.getElementById('error');
-    const reloadBtn = document.getElementById('reload');
+    <form id="add-car-form" style="margin-top:12px;">
+      <h3 style="margin-bottom:4px;">Добавить автомобиль</h3>
+      <label>Модель:
+        <input name="model" required>
+      </label>
+      <label>Номер:
+        <input name="plate_number" required>
+      </label>
+      <label>Цена в день:
+        <input name="price_per_day" type="number" min="0" step="0.01" required>
+      </label>
+      <button type="submit">Добавить</button>
+    </form>
 
-    async function loadMe() {
-      const resp = await fetch('/api/me', {credentials: 'same-origin'});
-      if (!resp.ok) {
-        window.location.href = '/login.html';
-        return;
-      }
-      const data = await resp.json();
-      userInfo.textContent = `Вы вошли как ${data.username}`;
+    <h3 style="margin-top:16px;">Забронировать автомобиль</h3>
+    <form id="booking-form">
+      <label>Автомобиль:
+        <select name="car_id" id="car-select" required>
+          <option value="">— выберите машину —</option>
+        </select>
+      </label>
+      <label>Дата начала:
+        <input name="start_date" type="date" required>
+      </label>
+      <label>Дата конца:
+        <input name="end_date" type="date" required>
+      </label>
+      <button type="submit">Отправить заявку</button>
+    </form>
+    <p id="booking-error" style="color:red"></p>
+
+    <button id="reload">Обновить список</button>
+    <button id="open-bookings" type="button">Заявки</button>
+    <button id="logout-btn" type="button">Выйти</button>
+
+
+    <ul id="cars-list"></ul>
+    <p id="error" style="color:red"></p>
+  </div>
+</div>
+
+<script>
+  const userInfo = document.getElementById('user-info');
+  const carsList = document.getElementById('cars-list');
+  const errorEl = document.getElementById('error');
+  const reloadBtn = document.getElementById('reload');
+  const logoutBtn = document.getElementById('logout-btn');
+  const addCarForm = document.getElementById('add-car-form');
+  const bookingForm = document.getElementById('booking-form');
+  const bookingErrorEl = document.getElementById('booking-error');
+  const carSelect = document.getElementById('car-select');
+  const openBookingsBtn = document.getElementById('open-bookings');
+
+  openBookingsBtn.addEventListener('click', () => {
+    window.location.href = '/bookings.html';
+  });
+
+  async function loadMe() {
+    const resp = await fetch('/api/me', {credentials: 'same-origin'});
+    if (!resp.ok) {
+      window.location.href = '/login.html';
+      return;
+    }
+    const data = await resp.json();
+    userInfo.textContent = `Вы вошли как ${data.username}`;
+  }
+
+  async function loadCars() {
+    errorEl.textContent = '';
+    const resp = await fetch('/cars', {credentials: 'same-origin'});
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      errorEl.textContent = data.error || 'Ошибка загрузки машин';
+      return;
+    }
+    const cars = await resp.json();
+
+    // очищаем список и выпадашку
+    carsList.innerHTML = '';
+    carSelect.innerHTML = '<option value="">— выберите машину —</option>';
+
+    for (const car of cars) {
+      // пункт списка с id
+      const li = document.createElement('li');
+      li.textContent = `[${car.id}] ${car.model} (${car.plate_number}) — ${car.status}, ${car.price_per_day}₽/день`;
+      carsList.appendChild(li);
+
+      // опция в select
+      const opt = document.createElement('option');
+      opt.value = car.id;
+      opt.textContent = `[${car.id}] ${car.model} (${car.plate_number})`;
+      carSelect.appendChild(opt);
+    }
+  }
+
+  // Добавление автомобиля (доступно только ADMIN, остальным вернётся 403 с сервера)
+  addCarForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    errorEl.textContent = '';
+
+    const model = addCarForm.model.value;
+    const plate = addCarForm.plate_number.value;
+    const price = parseFloat(addCarForm.price_per_day.value);
+
+    const resp = await fetch('/cars', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      credentials: 'same-origin',
+      body: JSON.stringify({model, plate_number: plate, price_per_day: price})
+    });
+
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      errorEl.textContent = data.error || 'Ошибка добавления автомобиля';
+      return;
     }
 
-    async function loadCars() {
-      errorEl.textContent = '';
-      carsList.innerHTML = '';
-      const resp = await fetch('/cars', {credentials: 'same-origin'});
-      if (!resp.ok) {
-        const data = await resp.json().catch(() => ({}));
-        errorEl.textContent = data.error || 'Ошибка загрузки машин';
-        return;
-      }
-      const cars = await resp.json();
-      for (const car of cars) {
-        const li = document.createElement('li');
-        li.textContent = `${car.model} (${car.plate_number}) — ${car.status}, ${car.price_per_day}₽/день`;
-        carsList.appendChild(li);
-      }
+    addCarForm.reset();
+    await loadCars();
+  });
+
+  // Логаут
+  logoutBtn.addEventListener('click', async () => {
+    await fetch('/api/logout', {
+      method: 'POST',
+      credentials: 'same-origin'
+    });
+    window.location.href = '/login.html';
+  });
+
+  // Создание бронирования (заявки)
+  bookingForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    bookingErrorEl.textContent = '';
+
+    const car_id = parseInt(carSelect.value, 10);
+    const start_date = bookingForm.start_date.value;
+    const end_date = bookingForm.end_date.value;
+
+    const resp = await fetch('/bookings', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      credentials: 'same-origin',
+      body: JSON.stringify({ car_id, start_date, end_date })
+    });
+
+    if (resp.ok) {
+      bookingForm.reset();
+      alert('Заявка на бронь отправлена (PENDING)');
+    } else {
+      const data = await resp.json().catch(() => ({}));
+      bookingErrorEl.textContent = data.error || 'Ошибка бронирования';
     }
+  });
 
-    reloadBtn.addEventListener('click', loadCars);
+  reloadBtn.addEventListener('click', loadCars);
 
-    loadMe().then(loadCars);
-  </script>
+  loadMe().then(loadCars);
+</script>
 </body>
 </html>

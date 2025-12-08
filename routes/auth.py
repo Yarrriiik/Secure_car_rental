@@ -4,30 +4,79 @@ from flask import Blueprint, request, jsonify, make_response
 from db import get_connection
 from security.crypto import generate_salt, hash_password
 from security.session import create_session
-from security.auth_utils import get_current_user, require_role
-from security.dh import create_dh_session
+from security.auth_utils import require_role, delete_session
 from security.dh import create_dh_session, derive_shared_key
 from security.symmetric import decrypt_password_aes_cbc
-import base64
 
 auth_bp = Blueprint("auth", __name__)
+
+def _perform_login(username: str, password: str):
+    """
+    Общая логика логина:
+    - находит пользователя
+    - проверяет хеш пароля
+    - создаёт сессию и куку
+    """
+    if not username or not password:
+        return jsonify({"error": "username and password required"}), 400
+
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "SELECT id, password_hash, salt FROM users WHERE username = %s",
+            (username,),
+        )
+        user = cur.fetchone()
+    finally:
+        cur.close()
+        conn.close()
+
+    if user is None:
+        return jsonify({"error": "invalid credentials"}), 401
+
+    expected_hash = hash_password(password, user["salt"])
+    if expected_hash != user["password_hash"]:
+        return jsonify({"error": "invalid credentials"}), 401
+
+    ip = request.remote_addr or ""
+    ua = request.headers.get("User-Agent", "")
+
+    token = create_session(user["id"], ip, ua)
+
+    resp = make_response(jsonify({"status": "ok"}))
+    resp.set_cookie(
+        "session_token",
+        token,
+        httponly=True,
+        samesite="Lax",
+    )
+    return resp, 200
 
 
 @auth_bp.route("/api/register", methods=["POST"])
 def register():
-    data = request.get_json()
+    data = request.get_json() or {}
     username = data.get("username")
     password = data.get("password")
 
     if not username or not password:
         return jsonify({"error": "username and password required"}), 400
 
-    salt = generate_salt()
-    password_hash = hash_password(password, salt)
-
     conn = get_connection()
     cur = conn.cursor()
     try:
+        # Проверим, что такого логина ещё нет
+        cur.execute(
+            "SELECT id FROM users WHERE username = %s",
+            (username,),
+        )
+        if cur.fetchone() is not None:
+            return jsonify({"error": "username already exists"}), 400
+
+        salt = generate_salt()
+        password_hash = hash_password(password, salt)
+
         cur.execute(
             """
             INSERT INTO users (username, password_hash, salt)
@@ -52,60 +101,29 @@ def register():
 
         conn.commit()
         return jsonify({"status": "ok", "user_id": user_id}), 201
-    except Exception as e:
+    except Exception:
         conn.rollback()
-        return jsonify({"error": str(e)}), 500
+        # Во внешнем API не светим текст SQL-ошибки
+        return jsonify({"error": "internal error"}), 500
     finally:
         cur.close()
         conn.close()
+
 
 
 @auth_bp.route("/api/login", methods=["POST"])
 def login():
-    data = request.get_json()
+    data = request.get_json() or {}
     username = data.get("username")
     password = data.get("password")
 
-    if not username or not password:
-        return jsonify({"error": "username and password required"}), 400
+    return _perform_login(username, password)
 
-    conn = get_connection()
-    cur = conn.cursor()
-    try:
-        cur.execute(
-            "SELECT id, password_hash, salt FROM users WHERE username = %s",
-            (username,),
-        )
-        user = cur.fetchone()
-    finally:
-        cur.close()
-        conn.close()
-
-    if user is None:
-        return jsonify({"error": "invalid credentials"}), 401
-
-    expected_hash = hash_password(password, user["salt"])
-    if expected_hash != user["password_hash"]:
-        return jsonify({"error": "invalid credentials"}), 401
-
-    ip = request.remote_addr or ""
-    ua = request.headers.get("User-Agent", "")
-
-    token = create_session(user["id"], ip, ua)
-
-    resp = make_response(jsonify({"status": "ok"}))
-    resp.set_cookie(
-        "session_token",
-        token,
-        httponly=True,
-        samesite="Lax",
-    )
-    return resp, 200
 
 
 @auth_bp.route("/api/login_secure", methods=["POST"])
 def login_secure():
-    data = request.get_json()
+    data = request.get_json() or {}
     username = data.get("username")
     dh_id = data.get("dh_id")
     client_pub_str = data.get("client_pub")
@@ -130,41 +148,11 @@ def login_secure():
     try:
         password = decrypt_password_aes_cbc(key, iv_b64, ciphertext_b64)
     except Exception:
-        return jsonify({"error": "cannot decrypt password"}), 400
+        return jsonify({"error": "invalid encrypted payload"}), 400
 
-    # Дальше логика та же, что в обычном login(), только пароль уже расшифрован
-    conn = get_connection()
-    cur = conn.cursor()
-    try:
-        cur.execute(
-            "SELECT id, password_hash, salt FROM users WHERE username = %s",
-            (username,),
-        )
-        user = cur.fetchone()
-    finally:
-        cur.close()
-        conn.close()
+    # Дальше используем ту же логику, что и в обычном /api/login
+    return _perform_login(username, password)
 
-    if user is None:
-        return jsonify({"error": "invalid credentials"}), 401
-
-    expected_hash = hash_password(password, user["salt"])
-    if expected_hash != user["password_hash"]:
-        return jsonify({"error": "invalid credentials"}), 401
-
-    ip = request.remote_addr or ""
-    ua = request.headers.get("User-Agent", "")
-
-    token = create_session(user["id"], ip, ua)
-
-    resp = make_response(jsonify({"status": "ok"}))
-    resp.set_cookie(
-        "session_token",
-        token,
-        httponly=True,
-        samesite="Lax",
-    )
-    return resp, 200
 
 
 @auth_bp.route("/api/me", methods=["GET"])
@@ -184,3 +172,12 @@ def dh_init():
         "g": str(g),
         "server_pub": str(server_pub),
     }), 200
+
+@auth_bp.route("/api/logout", methods=["POST"])
+def logout():
+    token = request.cookies.get("session_token")
+    if token:
+        delete_session(token)  # у тебя уже должна быть функция удаления сессии
+    resp = make_response(jsonify({"status": "ok"}))
+    resp.delete_cookie("session_token")  # скажем браузеру забыть куку [web:292][web:294]
+    return resp, 200

@@ -5,6 +5,11 @@ from typing import Optional
 from flask import request
 
 from db import get_connection
+from flask import request, jsonify
+import secrets
+import time
+
+from db import get_connection
 
 
 def get_current_user():
@@ -87,3 +92,17 @@ def require_role(*roles):
 
         return wrapper
     return decorator
+
+def delete_session(token: str) -> None:
+    """
+    Удаляет сессию из БД по токену.
+    Ничего не возвращает, ошибки наружу не кидает.
+    """
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute("DELETE FROM sessions WHERE token = %s", (token,))
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
