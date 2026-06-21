@@ -2,14 +2,23 @@ version: "3.9"
 
 services:
   db:
-    image: postgres:16
+    image: postgres:16-alpine
     container_name: secure_car_rental_db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: secure_user
-      POSTGRES_PASSWORD: secure_pass
-      POSTGRES_DB: secure_car_rental
+      POSTGRES_USER: ${DB_USER:-car_rental_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-car_rental_password}
+      POSTGRES_DB: ${DB_NAME:-secure_car_rental}
     ports:
-      - "5432:5432"
+      - "${DB_PORT:-5433}:5432"
     volumes:
-      - ./pgdata:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
+      - ./schema/init.sql:/docker-entrypoint-initdb.d/00_init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-car_rental_user} -d ${DB_NAME:-secure_car_rental}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:

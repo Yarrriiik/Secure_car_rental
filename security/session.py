@@ -1,4 +1,3 @@
-# security/session.py
 from datetime import datetime, timedelta
 import secrets
 

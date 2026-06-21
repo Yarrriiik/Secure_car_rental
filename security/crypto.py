@@ -1,7 +1,6 @@
-# security/crypto.py
-import os
-import hashlib
 import base64
+import hashlib
+import os
 
 
 def generate_salt(length: int = 16) -> str:
@@ -9,5 +8,4 @@ def generate_salt(length: int = 16) -> str:
 
 
 def hash_password(password: str, salt: str) -> str:
-    data = (salt + password).encode("utf-8")
-    return hashlib.sha256(data).hexdigest()
+    return hashlib.sha256((salt + password).encode("utf-8")).hexdigest()

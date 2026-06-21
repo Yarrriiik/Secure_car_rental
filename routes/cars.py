@@ -1,5 +1,4 @@
-# routes/cars.py
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, jsonify, request
 
 from db import get_connection
 from security.auth_utils import require_role
@@ -20,8 +19,7 @@ def list_cars(current_user):
             ORDER BY id
             """
         )
-        rows = cur.fetchall()
-        return jsonify(rows), 200
+        return jsonify(cur.fetchall()), 200
     finally:
         cur.close()
         conn.close()
@@ -53,7 +51,7 @@ def get_car(car_id, current_user):
 @cars_bp.route("/cars", methods=["POST"])
 @require_role("ADMIN")
 def create_car(current_user):
-    data = request.get_json()
+    data = request.get_json() or {}
     model = data.get("model")
     plate_number = data.get("plate_number")
     price_per_day = data.get("price_per_day")
@@ -83,7 +81,7 @@ def create_car(current_user):
 @cars_bp.route("/cars/<int:car_id>/status", methods=["PUT"])
 @require_role("MANAGER", "ADMIN")
 def update_car_status(car_id, current_user):
-    data = request.get_json()
+    data = request.get_json() or {}
     status = data.get("status")
 
     if status not in ("AVAILABLE", "BOOKED", "SERVICE"):

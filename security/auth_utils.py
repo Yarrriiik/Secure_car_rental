@@ -1,13 +1,7 @@
-# security/auth_utils.py
 from datetime import datetime
-from typing import Optional
+from functools import wraps
 
-from flask import request
-
-from db import get_connection
-from flask import request, jsonify
-import secrets
-import time
+from flask import jsonify, request
 
 from db import get_connection
 
@@ -17,16 +11,15 @@ def get_current_user():
     if not token:
         return None
 
-    ip = request.remote_addr or ""
-    ua = request.headers.get("User-Agent", "")
+    ip_address = request.remote_addr or ""
+    user_agent = request.headers.get("User-Agent", "")
 
     conn = get_connection()
     cur = conn.cursor()
     try:
         cur.execute(
             """
-            SELECT s.user_id, s.ip_address, s.user_agent, s.expires_at,
-                   u.username
+            SELECT s.user_id, s.ip_address, s.user_agent, s.expires_at, u.username
             FROM sessions s
             JOIN users u ON u.id = s.user_id
             WHERE s.token = %s
@@ -40,20 +33,13 @@ def get_current_user():
 
     if row is None:
         return None
-
-    # Проверяем срок жизни и совпадение IP/UA — это наша защита на случай кражи cookies
     if row["expires_at"] < datetime.utcnow():
         return None
-    if row["ip_address"] != ip or row["user_agent"] != ua:
+    if row["ip_address"] != ip_address or row["user_agent"] != user_agent:
         return None
 
-    return {
-        "id": row["user_id"],
-        "username": row["username"],
-    }
+    return {"id": row["user_id"], "username": row["username"]}
 
-from functools import wraps
-from flask import jsonify
 
 def get_user_roles(user_id: int):
     conn = get_connection()
@@ -72,12 +58,13 @@ def get_user_roles(user_id: int):
     finally:
         cur.close()
         conn.close()
+
     return {row["name"] for row in rows}
 
 
 def require_role(*roles):
-    def decorator(fn):
-        @wraps(fn)
+    def decorator(function):
+        @wraps(function)
         def wrapper(*args, **kwargs):
             user = get_current_user()
             if user is None:
@@ -87,17 +74,14 @@ def require_role(*roles):
             if not any(role in user_roles for role in roles):
                 return jsonify({"error": "forbidden"}), 403
 
-            # прокидываем user в обработчик, чтобы не ходить лишний раз в БД
-            return fn(*args, current_user=user, **kwargs)
+            return function(*args, current_user=user, **kwargs)
 
         return wrapper
+
     return decorator
 
+
 def delete_session(token: str) -> None:
-    """
-    Удаляет сессию из БД по токену.
-    Ничего не возвращает, ошибки наружу не кидает.
-    """
     conn = get_connection()
     cur = conn.cursor()
     try:

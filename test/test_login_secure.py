@@ -4,13 +4,13 @@ import os
 import secrets
 
 import requests
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes  # type: ignore
-from cryptography.hazmat.primitives import padding  # type: ignore
 from cryptography.hazmat.backends import default_backend  # type: ignore
+from cryptography.hazmat.primitives import padding  # type: ignore
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes  # type: ignore
 
-BASE_URL = "http://127.0.0.1:5000"
-USERNAME = "testuser"
-PASSWORD = "testpass"  # реальный пароль пользователя в БД
+BASE_URL = os.getenv("BASE_URL", "http://127.0.0.1:5000")
+USERNAME = os.getenv("TEST_USERNAME", "testuser")
+PASSWORD = os.getenv("TEST_PASSWORD", "testpass")
 
 
 def aes_encrypt(key: bytes, plaintext: str):
@@ -28,41 +28,34 @@ def aes_encrypt(key: bytes, plaintext: str):
     )
 
 
-def main():
-    # 1. Инициализация DH на сервере
-    r = requests.get(f"{BASE_URL}/api/dh-init")
-    print("dh-init:", r.status_code, r.text)
-    r.raise_for_status()
-    data = r.json()
+def main() -> None:
+    response = requests.get(f"{BASE_URL}/api/dh-init", timeout=10)
+    response.raise_for_status()
+    data = response.json()
 
     dh_id = data["dh_id"]
-    p = int(data["p"])
-    g = int(data["g"])
-    server_pub = int(data["server_pub"])
+    prime = int(data["p"])
+    generator = int(data["g"])
+    server_public = int(data["server_pub"])
 
-    # 2. Клиент генерит свой секрет b и публичный ключ B = g^b mod p
-    b = secrets.randbelow(p - 2) + 2
-    client_pub = pow(g, b, p)
+    private_key = secrets.randbelow(prime - 2) + 2
+    client_public = pow(generator, private_key, prime)
 
-    # 3. Общий секрет K = A^b mod p
-    shared = pow(server_pub, b, p)
-    shared_bytes = shared.to_bytes((shared.bit_length() + 7) // 8, "big")
-    key = hashlib.sha256(shared_bytes).digest()  # 32-байтный AES-ключ
-
-    # 4. Шифруем пароль AES-CBC
-    iv_b64, ciphertext_b64 = aes_encrypt(key, PASSWORD)
+    shared_secret = pow(server_public, private_key, prime)
+    shared_bytes = shared_secret.to_bytes((shared_secret.bit_length() + 7) // 8, "big")
+    aes_key = hashlib.sha256(shared_bytes).digest()
+    iv_b64, ciphertext_b64 = aes_encrypt(aes_key, PASSWORD)
 
     payload = {
         "username": USERNAME,
         "dh_id": dh_id,
-        "client_pub": str(client_pub),
+        "client_pub": str(client_public),
         "iv": iv_b64,
         "ciphertext": ciphertext_b64,
     }
 
-    # 5. Логин через /api/login_secure
-    r2 = requests.post(f"{BASE_URL}/api/login_secure", json=payload)
-    print("login_secure:", r2.status_code, r2.text)
+    login_response = requests.post(f"{BASE_URL}/api/login_secure", json=payload, timeout=10)
+    print("login_secure:", login_response.status_code, login_response.text)
 
 
 if __name__ == "__main__":

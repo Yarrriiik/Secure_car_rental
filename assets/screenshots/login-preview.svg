@@ -1,0 +1,31 @@
+<svg width="1280" height="820" viewBox="0 0 1280 820" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1280" height="820" fill="#EEF2F8"/>
+  <rect x="360" y="108" width="560" height="604" rx="28" fill="#FFFFFF" stroke="#E2E8F2"/>
+  <text x="432" y="190" fill="#132238" font-family="Segoe UI, Arial, sans-serif" font-size="38" font-weight="700">Secure Car Rental</text>
+  <text x="432" y="230" fill="#607286" font-family="Segoe UI, Arial, sans-serif" font-size="19">Protected login flow with encrypted password submission</text>
+
+  <text x="432" y="302" fill="#4E6072" font-family="Segoe UI, Arial, sans-serif" font-size="17" font-weight="600">Username</text>
+  <rect x="432" y="318" width="416" height="56" rx="14" fill="#F8FAFD" stroke="#D7E0EB"/>
+  <text x="456" y="352" fill="#94A1B2" font-family="Segoe UI, Arial, sans-serif" font-size="18">Enter username</text>
+
+  <text x="432" y="420" fill="#4E6072" font-family="Segoe UI, Arial, sans-serif" font-size="17" font-weight="600">Password</text>
+  <rect x="432" y="436" width="416" height="56" rx="14" fill="#F8FAFD" stroke="#D7E0EB"/>
+  <text x="456" y="470" fill="#94A1B2" font-family="Segoe UI, Arial, sans-serif" font-size="18">••••••••••••••</text>
+
+  <rect x="432" y="536" width="416" height="58" rx="16" fill="#2563EB"/>
+  <text x="585" y="573" fill="#FFFFFF" font-family="Segoe UI, Arial, sans-serif" font-size="21" font-weight="700">Sign in</text>
+
+  <rect x="432" y="618" width="416" height="1" fill="#E4EAF2"/>
+  <text x="432" y="660" fill="#607286" font-family="Segoe UI, Arial, sans-serif" font-size="17">No account yet?</text>
+  <text x="548" y="660" fill="#2563EB" font-family="Segoe UI, Arial, sans-serif" font-size="17" font-weight="600">Create one</text>
+
+  <rect x="932" y="160" width="244" height="130" rx="22" fill="#132238"/>
+  <text x="960" y="206" fill="#FFFFFF" font-family="Segoe UI, Arial, sans-serif" font-size="22" font-weight="700">Demo highlights</text>
+  <g fill="#B7C3D0" font-family="Segoe UI, Arial, sans-serif" font-size="16">
+    <text x="960" y="244">• Flask + PostgreSQL</text>
+    <text x="960" y="270">• RBAC and sessions</text>
+  </g>
+  <g fill="#B7C3D0" font-family="Segoe UI, Arial, sans-serif" font-size="16">
+    <text x="960" y="296">• Secure login demo</text>
+  </g>
+</svg>

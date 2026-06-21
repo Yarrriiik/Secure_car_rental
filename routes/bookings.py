@@ -1,6 +1,7 @@
-# routes/bookings.py
-from flask import Blueprint, request, jsonify
 from datetime import datetime
+
+from flask import Blueprint, jsonify, request
+
 from db import get_connection
 from security.auth_utils import require_role
 
@@ -12,16 +13,15 @@ bookings_bp = Blueprint("bookings", __name__)
 def create_booking(current_user):
     data = request.get_json() or {}
     car_id = data.get("car_id")
-    start_date_str = data.get("start_date")
-    end_date_str = data.get("end_date")
+    start_date_raw = data.get("start_date")
+    end_date_raw = data.get("end_date")
 
-    if not car_id or not start_date_str or not end_date_str:
+    if not car_id or not start_date_raw or not end_date_raw:
         return jsonify({"error": "car_id, start_date, end_date required"}), 400
 
-    # Простейшая валидация формата и порядка дат
     try:
-        start_date = datetime.fromisoformat(start_date_str).date()
-        end_date = datetime.fromisoformat(end_date_str).date()
+        start_date = datetime.fromisoformat(start_date_raw).date()
+        end_date = datetime.fromisoformat(end_date_raw).date()
     except ValueError:
         return jsonify({"error": "invalid date format, use YYYY-MM-DD"}), 400
 
@@ -31,7 +31,6 @@ def create_booking(current_user):
     conn = get_connection()
     cur = conn.cursor()
     try:
-        # Проверяем, что машина существует и доступна
         cur.execute(
             """
             SELECT id, status FROM cars
@@ -45,7 +44,6 @@ def create_booking(current_user):
         if car["status"] != "AVAILABLE":
             return jsonify({"error": "car not available"}), 400
 
-        # Создаём бронь со статусом PENDING для текущего пользователя
         cur.execute(
             """
             INSERT INTO bookings (user_id, car_id, start_date, end_date, status)
@@ -55,14 +53,11 @@ def create_booking(current_user):
             (current_user["id"], car_id, start_date, end_date),
         )
         booking_id = cur.fetchone()["id"]
-
-        # Машину пока не трогаем, она станет BOOKED после APPROVED
         conn.commit()
         return jsonify({"status": "ok", "booking_id": booking_id}), 201
     finally:
         cur.close()
         conn.close()
-
 
 
 @bookings_bp.route("/bookings/my", methods=["GET"])
@@ -82,8 +77,7 @@ def my_bookings(current_user):
             """,
             (current_user["id"],),
         )
-        rows = cur.fetchall()
-        return jsonify(rows), 200
+        return jsonify(cur.fetchall()), 200
     finally:
         cur.close()
         conn.close()
@@ -105,8 +99,7 @@ def all_bookings(current_user):
             ORDER BY b.created_at DESC
             """
         )
-        rows = cur.fetchall()
-        return jsonify(rows), 200
+        return jsonify(cur.fetchall()), 200
     finally:
         cur.close()
         conn.close()
@@ -124,7 +117,6 @@ def update_booking_status(booking_id, current_user):
     conn = get_connection()
     cur = conn.cursor()
     try:
-        # Находим бронь
         cur.execute(
             """
             SELECT id, car_id, status
@@ -137,34 +129,19 @@ def update_booking_status(booking_id, current_user):
         if booking is None:
             return jsonify({"error": "booking not found"}), 404
 
-        old_status = booking["status"]
-
-        # Простая логика переходов: PENDING -> APPROVED -> CANCELLED/FINISHED
-        if old_status in ("CANCELLED", "FINISHED") and status == "PENDING":
+        current_status = booking["status"]
+        if current_status in ("CANCELLED", "FINISHED") and status == "PENDING":
             return jsonify({"error": "cannot move finished/cancelled booking back to pending"}), 400
 
-        # Обновляем статус брони
-        cur.execute(
-            "UPDATE bookings SET status = %s WHERE id = %s",
-            (status, booking_id),
-        )
+        cur.execute("UPDATE bookings SET status = %s WHERE id = %s", (status, booking_id))
 
-        # Управляем статусом машины:
-        # APPROVED -> BOOKED, CANCELLED/FINISHED -> AVAILABLE
         if status == "APPROVED":
-            cur.execute(
-                "UPDATE cars SET status = 'BOOKED' WHERE id = %s",
-                (booking["car_id"],),
-            )
+            cur.execute("UPDATE cars SET status = 'BOOKED' WHERE id = %s", (booking["car_id"],))
         elif status in ("CANCELLED", "FINISHED"):
-            cur.execute(
-                "UPDATE cars SET status = 'AVAILABLE' WHERE id = %s",
-                (booking["car_id"],),
-            )
+            cur.execute("UPDATE cars SET status = 'AVAILABLE' WHERE id = %s", (booking["car_id"],))
 
         conn.commit()
         return jsonify({"status": "ok"}), 200
     finally:
         cur.close()
         conn.close()
-

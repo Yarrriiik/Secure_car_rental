@@ -1,57 +1,36 @@
-# security/dh.py
-import secrets
 import hashlib
+import secrets
 import time
 
-# Простые параметры для DH (для учебной задачи, не для продакшена)
-P = 170141183460469231731687303715884105727  # 2^127 - 1, простое число
+P = 170141183460469231731687303715884105727
 G = 5
-
-# Простое in-memory-хранилище состояний DH-сессий
 _dh_sessions = {}
 
 
 def create_dh_session(ttl_seconds: int = 300):
-    """
-    Создаёт новую DH-сессию:
-    - генерит приватный ключ сервера a
-    - считает публичный ключ A = g^a mod p
-    - возвращает dh_id + (p, g, A)
-    """
-    priv = secrets.randbelow(P - 2) + 2  # 2..P-1
-    pub = pow(G, priv, P)
+    private_key = secrets.randbelow(P - 2) + 2
+    public_key = pow(G, private_key, P)
+    session_id = secrets.token_urlsafe(16)
 
-    dh_id = secrets.token_urlsafe(16)
-    _dh_sessions[dh_id] = {
-        "priv": priv,
+    _dh_sessions[session_id] = {
+        "private_key": private_key,
         "created_at": time.time(),
         "ttl": ttl_seconds,
     }
-    return dh_id, P, G, pub
+    return session_id, P, G, public_key
 
 
-def derive_shared_key(dh_id: str, client_pub: int):
-    """
-    По сохранённому приватному ключу и публичному ключу клиента
-    считает общий секрет и из него делает 32-байтный ключ (SHA-256).
-    """
-    sess = _dh_sessions.get(dh_id)
-    if not sess:
+def derive_shared_key(session_id: str, client_public_key: int):
+    session = _dh_sessions.get(session_id)
+    if not session:
         return None
 
-    # истекла ли сессия
-    if time.time() - sess["created_at"] > sess["ttl"]:
-        _dh_sessions.pop(dh_id, None)
+    if time.time() - session["created_at"] > session["ttl"]:
+        _dh_sessions.pop(session_id, None)
         return None
 
-    priv = sess["priv"]
-    # общий секрет K = B^a mod p
-    shared = pow(client_pub, priv, P)
+    shared_secret = pow(client_public_key, session["private_key"], P)
+    _dh_sessions.pop(session_id, None)
 
-    # DH-сессию можно выкинуть (одноразовая)
-    _dh_sessions.pop(dh_id, None)
-
-    # превращаем число в байты и хешируем
-    shared_bytes = shared.to_bytes((shared.bit_length() + 7) // 8, "big")
-    key = hashlib.sha256(shared_bytes).digest()  # 32 байта
-    return key
+    shared_bytes = shared_secret.to_bytes((shared_secret.bit_length() + 7) // 8, "big")
+    return hashlib.sha256(shared_bytes).digest()
