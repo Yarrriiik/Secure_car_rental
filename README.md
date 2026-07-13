@@ -8,7 +8,8 @@ Educational backend project for a car rental service with authentication, role-b
 
 - Flask backend with route separation by domain;
 - PostgreSQL integration with explicit schema initialization;
-- cookie-based sessions;
+- cookie-based sessions with only token digests stored in PostgreSQL;
+- bcrypt password hashing;
 - role-based authorization for users, managers, and admins;
 - booking lifecycle management;
 - an educational secure-login flow based on Diffie-Hellman key exchange and AES encryption in the browser.
@@ -34,6 +35,7 @@ The secure login flow in this repository is implemented for study purposes. It d
 .
 |-- app.py
 |-- db.py
+|-- Dockerfile
 |-- docker-compose.yml
 |-- requirements.txt
 |-- routes/
@@ -55,8 +57,10 @@ The secure login flow in this repository is implemented for study purposes. It d
 |   |-- login.html
 |   |-- register.html
 |   `-- style.css
-`-- test/
-    `-- test_login_secure.py
+|-- test/
+|   `-- test_login_secure.py
+`-- tests/
+    `-- test_app.py
 ```
 
 ## Features
@@ -76,13 +80,13 @@ The secure login flow in this repository is implemented for study purposes. It d
 copy .env.example .env
 ```
 
-2. Start PostgreSQL:
+2. Start PostgreSQL and the Flask application:
 
 ```bash
-docker compose up -d
+docker compose up --build
 ```
 
-3. Install dependencies and run the app:
+For a non-containerized application process, start only PostgreSQL and then run:
 
 ```bash
 python -m venv .venv
@@ -91,7 +95,7 @@ pip install -r requirements.txt
 python app.py
 ```
 
-4. Open:
+3. Open:
 
 - `http://127.0.0.1:5000/login.html`
 - `http://127.0.0.1:5000/register.html`
@@ -110,6 +114,12 @@ The bootstrap SQL creates:
 
 ## Testing the secure login flow
 
+Run the isolated pytest suite (it does not require PostgreSQL):
+
+```bash
+pytest -q
+```
+
 The repository includes an integration-style script:
 
 ```bash
@@ -124,5 +134,5 @@ Before running it, make sure:
 ## Limitations
 
 - the custom Diffie-Hellman login flow is educational only;
-- passwords are hashed with salted SHA-256 for study purposes, not with a stronger password hashing scheme such as Argon2 or bcrypt;
+- the demo still requires HTTPS and standard deployment hardening outside a local environment;
 - there is no production deployment configuration in this repository.
