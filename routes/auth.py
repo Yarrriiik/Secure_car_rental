@@ -4,7 +4,7 @@ from flask import Blueprint, jsonify, make_response, request
 
 from db import get_connection
 from security.auth_utils import delete_session, require_role
-from security.crypto import generate_salt, hash_password
+from security.crypto import hash_password, verify_legacy_password, verify_password
 from security.dh import create_dh_session, derive_shared_key
 from security.session import create_session
 from security.symmetric import decrypt_password_aes_cbc
@@ -48,9 +48,28 @@ def _perform_login(username: str, password: str):
     if user is None:
         return jsonify({"error": "invalid credentials"}), 401
 
-    expected_hash = hash_password(password, user["salt"])
-    if expected_hash != user["password_hash"]:
+    password_hash = user["password_hash"]
+    is_bcrypt = password_hash.startswith(("$2a$", "$2b$", "$2y$"))
+    password_valid = (
+        verify_password(password, password_hash)
+        if is_bcrypt
+        else verify_legacy_password(password, user.get("salt"), password_hash)
+    )
+    if not password_valid:
         return jsonify({"error": "invalid credentials"}), 401
+
+    if not is_bcrypt:
+        conn = get_connection()
+        cur = conn.cursor()
+        try:
+            cur.execute(
+                "UPDATE users SET password_hash = %s, salt = NULL WHERE id = %s",
+                (hash_password(password), user["id"]),
+            )
+            conn.commit()
+        finally:
+            cur.close()
+            conn.close()
 
     return _build_login_response(user["id"])
 
@@ -71,16 +90,15 @@ def register():
         if cur.fetchone() is not None:
             return jsonify({"error": "username already exists"}), 400
 
-        salt = generate_salt()
-        password_hash = hash_password(password, salt)
+        password_hash = hash_password(password)
 
         cur.execute(
             """
-            INSERT INTO users (username, password_hash, salt)
-            VALUES (%s, %s, %s)
+            INSERT INTO users (username, password_hash)
+            VALUES (%s, %s)
             RETURNING id
             """,
-            (username, password_hash, salt),
+            (username, password_hash),
         )
         user_id = cur.fetchone()["id"]
 
