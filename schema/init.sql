@@ -2,10 +2,14 @@ CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
     username VARCHAR(100) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
-    salt VARCHAR(255) NOT NULL,
+    salt VARCHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     is_active BOOLEAN DEFAULT TRUE
 );
+
+-- Older local databases used a separate salt column. Bcrypt embeds its salt
+-- in password_hash, so the legacy column is now optional.
+ALTER TABLE users ALTER COLUMN salt DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS roles (
     id SERIAL PRIMARY KEY,

@@ -1,9 +1,14 @@
 from datetime import datetime, timedelta
+import hashlib
 import secrets
 
 from db import get_connection
 
 SESSION_LIFETIME_HOURS = 2
+
+
+def token_digest(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 def create_session(user_id: int, ip_address: str, user_agent: str) -> str:
@@ -18,7 +23,7 @@ def create_session(user_id: int, ip_address: str, user_agent: str) -> str:
             INSERT INTO sessions (user_id, token, ip_address, user_agent, expires_at)
             VALUES (%s, %s, %s, %s, %s)
             """,
-            (user_id, token, ip_address, user_agent, expires_at),
+            (user_id, token_digest(token), ip_address, user_agent, expires_at),
         )
         conn.commit()
     finally:

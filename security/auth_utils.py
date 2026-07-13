@@ -4,6 +4,7 @@ from functools import wraps
 from flask import jsonify, request
 
 from db import get_connection
+from security.session import token_digest
 
 
 def get_current_user():
@@ -24,7 +25,7 @@ def get_current_user():
             JOIN users u ON u.id = s.user_id
             WHERE s.token = %s
             """,
-            (token,),
+            (token_digest(token),),
         )
         row = cur.fetchone()
     finally:
@@ -85,7 +86,7 @@ def delete_session(token: str) -> None:
     conn = get_connection()
     cur = conn.cursor()
     try:
-        cur.execute("DELETE FROM sessions WHERE token = %s", (token,))
+        cur.execute("DELETE FROM sessions WHERE token = %s", (token_digest(token),))
         conn.commit()
     finally:
         cur.close()

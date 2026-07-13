@@ -46,6 +46,20 @@ def create_booking(current_user):
 
         cur.execute(
             """
+            SELECT id FROM bookings
+            WHERE car_id = %s
+              AND status IN ('PENDING', 'APPROVED')
+              AND start_date <= %s
+              AND end_date >= %s
+            LIMIT 1
+            """,
+            (car_id, end_date, start_date),
+        )
+        if cur.fetchone() is not None:
+            return jsonify({"error": "booking dates conflict"}), 409
+
+        cur.execute(
+            """
             INSERT INTO bookings (user_id, car_id, start_date, end_date, status)
             VALUES (%s, %s, %s, %s, 'PENDING')
             RETURNING id
